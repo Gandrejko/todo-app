@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/db-connect';
-import User, {IUser} from '@/models/user';
+import User from '@/models/user';
 import {compare} from 'bcryptjs';
 import NextAuth, {NextAuthOptions} from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
@@ -37,7 +37,7 @@ export const AuthOptions: NextAuthOptions = {
       },
     }),
   ],
-  secret: process.env.NEXT_PUBLIC_SECRET!,
+  secret: process.env.NEXT_AUTH_SECRET!,
   pages: {
     signIn: '/login',
   },
@@ -50,7 +50,7 @@ export const AuthOptions: NextAuthOptions = {
       return token;
     },
     session: async ({session, token}) => {
-      const user = token.user as IUser;
+      const {password, ...user} = (token.user as any)._doc;
       session.user = user;
 
       return session;

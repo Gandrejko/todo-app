@@ -1,43 +1,40 @@
 import EditTodoCard from '@/components/common/edit-todo-card/EditTodoCard';
-import {TodoResponse, TodoUpdateRequest} from '@/types/todos';
-import {useRef, useState} from 'react';
+import LoadingOverlay from '@/components/common/loading-overlay/LoadingOverlay';
+import {queryClient} from '@/context/Providers';
+import {ServiceContext} from '@/context/TodoService';
+import {TodoResponse} from '@/types/todos';
+import {useContext, useRef, useState} from 'react';
+import {useMutation} from 'react-query';
 
 import styles from './TodoCard.module.css';
 
 type TodoCardProps = {
   todo: TodoResponse;
-  onDelete: (id: string) => void;
-  onUpdate: ({id, todo}: {id: string; todo: TodoUpdateRequest}) => void;
 };
-const TodoCard = ({todo, onDelete, onUpdate}: TodoCardProps) => {
+const TodoCard = ({todo}: TodoCardProps) => {
+  const {update} = useContext(ServiceContext);
   const inputRef = useRef<HTMLInputElement>(null);
   const [isEdit, setIsEdit] = useState(false);
 
-  const handleUpdate = (newTodo: TodoUpdateRequest) => {
-    setIsEdit(false);
-    onUpdate({id: todo._id, todo: newTodo});
-  };
-  const handleDelete = () => {
-    setIsEdit(false);
-    onDelete(todo._id);
-  };
+  const {mutate: updateTodo, isLoading} = useMutation(['todos'], update, {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({queryKey: ['todos']});
+    },
+  });
 
   return (
     <>
       {isEdit ? (
-        <EditTodoCard
-          todo={todo}
-          onSave={handleUpdate}
-          onDelete={handleDelete}
-        />
+        <EditTodoCard onCancel={() => setIsEdit(false)} todo={todo} />
       ) : (
-        <div className={styles.todoCard}>
+        <div data-testid="todo-card" className={styles.todoCard}>
+          {isLoading && <LoadingOverlay />}
           <div className={styles.left}>
             <div className={styles.checkBoxContainer}>
               <input
                 checked={todo.completed}
                 onChange={() =>
-                  onUpdate({
+                  updateTodo({
                     id: todo._id,
                     todo: {...todo, completed: !todo.completed},
                   })
@@ -56,7 +53,13 @@ const TodoCard = ({todo, onDelete, onUpdate}: TodoCardProps) => {
               ></div>
             </div>
 
-            <div className={styles.title}>{todo.title}</div>
+            <div
+              className={`${styles.title} ${
+                todo.completed && styles.completed
+              }`}
+            >
+              {todo.title}
+            </div>
           </div>
           <div>
             <button onClick={() => setIsEdit(true)} className={styles.editBtn}>

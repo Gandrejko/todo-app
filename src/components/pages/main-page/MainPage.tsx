@@ -1,148 +1,51 @@
 'use client';
 
 import EditTodoCard from '@/components/common/edit-todo-card/EditTodoCard';
-import Modal from '@/components/common/modal/Modal';
-import TodoCard from '@/components/common/todo-card/TodoCard';
-import {queryClient} from '@/context/Providers';
+import Header from '@/components/common/header/Header';
+import TodoList from '@/components/common/todo-list/TodoList';
 import {
-  TodoCreateRequest,
-  TodoResponse,
-  TodoUpdateRequest,
-} from '@/types/todos';
-import axios from 'axios';
-import {signOut, useSession} from 'next-auth/react';
-import {useRouter} from 'next/navigation';
+  BackendTodoService,
+  LocalStorageTodoService,
+  ServiceContext,
+} from '@/context/TodoService';
+import {Session} from 'next-auth';
 import {useState} from 'react';
-import {useMutation, useQuery} from 'react-query';
 import styles from './MainPage.module.css';
-import {MainContext} from '@/context/MainContext';
 
-const MainPage = () => {
-  const router = useRouter();
-  const session = useSession();
-  // @ts-ignore
-  const userId = session.data?.user?._doc._id;
-
+const MainPage = ({session}: {session: Session | null}) => {
+  const [service, setService] = useState(() => {
+    if (session) {
+      // @ts-ignore
+      const userId = session?.user?._id;
+      return new BackendTodoService(userId);
+    } else {
+      return new LocalStorageTodoService();
+    }
+  });
   const [isAddTodo, setIsAddTodo] = useState(false);
 
-  const {data: todos} = useQuery(
-    ['todos'],
-    () => userId && axios.get(`/api/todos/${userId}`),
-  );
-  const {mutate: createTodo} = useMutation(
-    ['todos'],
-    (todo: TodoCreateRequest) => axios.post(`/api/todos/${userId}`, todo),
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({queryKey: ['todos']});
-        setIsAddTodo(false);
-      },
-    },
-  );
-
-  const {mutate: deleteTodo} = useMutation(
-    ['todos'],
-    (id: string) => axios.delete(`/api/todos/${userId}/${id}`),
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({queryKey: ['todos']});
-      },
-    },
-  );
-
-  const {mutate: updateTodo} = useMutation(
-    ['todos'],
-    ({id, todo}: {id: string; todo: TodoUpdateRequest}) =>
-      axios.put(`/api/todos/${userId}/${id}`, todo),
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({queryKey: ['todos']});
-      },
-    },
-  );
-
-  const {mutate: deleteTodos} = useMutation(
-    ['todos'],
-    () => axios.delete(`/api/todos/${userId}`),
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({queryKey: ['todos']});
-      },
-    },
-  );
-
-  const {mutate: deleteCompletedTodos} = useMutation(
-    ['todos'],
-    () => axios.delete(`/api/todos/${userId}/completed`),
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({queryKey: ['todos']});
-      },
-    },
-  );
-
   return (
-    <MainContext.Provider value={{userId}}>
+    <ServiceContext.Provider value={service}>
       <main className={styles.container}>
-        {session.status === 'authenticated' && (
-          <>
-            <div className={styles.header}>
-              <h1>Todos</h1>
-              <div className={styles.buttons}>
-                <button
-                  onClick={() => deleteCompletedTodos()}
-                  className={styles.button}
-                >
-                  Clear finished todos
-                </button>
-                <button onClick={() => deleteTodos()} className={styles.button}>
-                  Clear all todos
-                </button>
-                <button className={styles.button} onClick={() => signOut()}>
-                  Sign out
-                </button>
-              </div>
-            </div>
-            <div className={styles.divider}></div>
-            <div className={styles.todosList}>
-              {todos?.data?.map((todo: TodoResponse) => (
-                <TodoCard
-                  onUpdate={updateTodo}
-                  onDelete={deleteTodo}
-                  todo={todo}
-                  key={todo._id}
-                />
-              ))}
-            </div>
-            <div className={styles.addTaskContainer}>
-              {isAddTodo ? (
-                <EditTodoCard
-                  onCancel={() => setIsAddTodo(false)}
-                  onSave={createTodo}
-                />
-              ) : (
-                <div
-                  onClick={() => setIsAddTodo(true)}
-                  className={styles.addTodoBtn}
-                >
-                  Add Task
-                </div>
-              )}
-            </div>
-          </>
-        )}
-        {session.status === 'unauthenticated' && (
-          <Modal isOpen={true} title="Please, login to see your todos">
-            <button
-              className={styles.siginButton}
-              onClick={() => router.push('/login')}
+        <Header isAuthenticated={!!session} />
+        <div className={styles.divider}></div>
+        <div className={styles.todosList}>
+          <TodoList />
+        </div>
+        <div className={styles.addTaskContainer}>
+          {isAddTodo ? (
+            <EditTodoCard onCancel={() => setIsAddTodo(false)} />
+          ) : (
+            <div
+              onClick={() => setIsAddTodo(true)}
+              className={styles.addTodoBtn}
             >
-              Sign in
-            </button>
-          </Modal>
-        )}
+              Add Task
+            </div>
+          )}
+        </div>
       </main>
-    </MainContext.Provider>
+    </ServiceContext.Provider>
   );
 };
 

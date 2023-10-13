@@ -1,59 +1,84 @@
 'use client';
 
-import {MainContext} from '@/context/MainContext';
-import {
-  TodoCreateRequest,
-  TodoResponse,
-  TodoUpdateRequest,
-} from '@/types/todos';
-import {useSession} from 'next-auth/react';
+import LoadingOverlay from '@/components/common/loading-overlay/LoadingOverlay';
+import {queryClient} from '@/context/Providers';
+import {ServiceContext} from '@/context/TodoService';
+import {TodoResponse} from '@/types/todos';
 import {useContext, useState} from 'react';
+import {useMutation} from 'react-query';
 
 import styles from './EditTodoCard.module.css';
 
 type EditTodoCardProps = {
   todo?: TodoResponse;
   onCancel?: () => void;
-  onSave:
-    | ((todo: TodoCreateRequest) => void)
-    | ((todo: TodoUpdateRequest) => void);
-  onDelete?: () => void;
 };
-const EditTodoCard = ({
-  todo,
-  onCancel,
-  onSave,
-  onDelete,
-}: EditTodoCardProps) => {
-  const {userId} = useContext(MainContext);
+const EditTodoCard = ({todo, onCancel}: EditTodoCardProps) => {
+  const {deleteById, create, update} = useContext(ServiceContext);
   const [inputValue, setInputValue] = useState(todo?.title || '');
+
+  const handleSuccess = async () => {
+    onCancel?.();
+    await queryClient.invalidateQueries({queryKey: ['todos']});
+  };
+
+  const {mutate: deleteTodo, isLoading: deleteLoading} = useMutation(
+    ['todos'],
+    deleteById,
+    {
+      onSuccess: handleSuccess,
+    },
+  );
+
+  const {mutate: createTodo, isLoading: createLoading} = useMutation(
+    ['todos'],
+    create,
+    {
+      onSuccess: handleSuccess,
+    },
+  );
+
+  const {mutate: updateTodo, isLoading: updateLoading} = useMutation(
+    ['todos'],
+    update,
+    {
+      onSuccess: handleSuccess,
+    },
+  );
 
   const handleSave = () => {
     if (!inputValue) return;
     if (todo) {
-      // @ts-ignore
-      onSave({
-        title: inputValue,
-        completed: todo.completed,
+      updateTodo({
+        id: todo._id,
+        todo: {
+          title: inputValue,
+          completed: todo.completed,
+        },
       });
     } else {
-      // @ts-ignore
-      onSave({title: inputValue});
+      createTodo({title: inputValue});
     }
   };
 
   return (
-    <div className={styles.editTodoCard}>
+    <div data-testid="edit-todo-card" className={styles.editTodoCard}>
+      {(deleteLoading || createLoading || updateLoading) && <LoadingOverlay />}
       <input
         type="text"
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         placeholder="What are you working on?"
         className={styles.input}
+        autoFocus
+        onKeyDown={e => e.code === 'Enter' && handleSave()}
       />
       <div className={styles.footer}>
         {todo ? (
-          <button onClick={onDelete} className={styles.deleteBtn}>
+          <button
+            onClick={() => deleteTodo(todo._id)}
+            className={styles.deleteBtn}
+          >
             Delete
           </button>
         ) : (
